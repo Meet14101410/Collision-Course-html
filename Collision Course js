@@ -1,0 +1,37 @@
+const c = document.getElementById("c"), ctx = c.getContext("2d");
+const W = c.width, H = c.height;
+const balls = [];
+
+function r(a,b){ return Math.random()*(b-a)+a; }
+
+class Ball{
+  constructor(x,y,r=16){
+    this.x=x; this.y=y; this.r=r;
+    this.vx=r(-2,2); this.vy=r(-2,2);
+    this.m=r*r; 
+    this.color=`hsl(${~~r(180,330)},80%,60%)`;
+  }
+  draw(){ ctx.beginPath(); ctx.fillStyle=this.color; ctx.arc(this.x,this.y,this.r,0,7); ctx.fill(); }
+  step(){
+    this.x+=this.vx; this.y+=this.vy;
+    if(this.x<this.r||this.x>W-this.r) this.vx*=-1;
+    if(this.y<this.r||this.y>H-this.r) this.vy*=-1;
+  }
+}
+
+// initial balls
+for(let i=0;i<6;i++) balls.push(new Ball(r(40,W-40), r(40,H-40), r(12,24)));
+
+function collide(a,b){
+  const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy);
+  if(d>=a.r+b.r) return;
+  const nx=dx/d, ny=dy/d;
+  const rel=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny;
+  if(rel>0) return;
+  const j=(-(1+1)*rel)/(1/a.m+1/b.m);
+  a.vx+=j*nx/a.m; a.vy+=j*ny/a.m;
+  b.vx-=j*nx/b.m; b.vy-=j*ny/b.m;
+}
+
+function loop(){
+  ctx.
