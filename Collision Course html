@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Collision Course</title>
+<style>
+  :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4}
+  html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto}
+  .wrap{display:grid;place-items:center;height:100%;background:radial-gradient(circle at 10% 10%, #071226 0%, var(--bg) 40%);color:#e6eef6}
+  .panel{width:900px;max-width:95%;background:linear-gradient(180deg,rgba(255,255,255,0.03),transparent);border-radius:12px;padding:14px;box-shadow:0 8px 30px rgba(2,6,23,.6)}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  h1{font-size:18px;margin:0}
+  #score{font-size:13px;color:var(--accent)}
+  canvas{display:block;width:100%;height:520px;background:linear-gradient(180deg,#071326 0%, #021224 100%);border-radius:8px}
+  footer{margin-top:8px;font-size:13px;color:#9fb0c3}
+  .hint{color:#9fb0c3;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <header>
+      <h1>Collision Course</h1>
+      <div id="score">Balls: 6</div>
+    </header>
+    <canvas id="c" width="1200" height="700"></canvas>
+    <footer>
+      <div class="hint">Click anywhere on the canvas to add a ball. Balls bounce off walls and each other (elastic collisions).</div>
+    </footer>
+  </div>
+</div>
+
+<script>
+// --- simple ball collision demo ---
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById('score');
+
+function rand(min,max){ return Math.random()*(max-min)+min; }
+
+class Ball {
+  constructor(x,y,r=16){
+    this.x=x; this.y=y; this.r=r;
+    this.vx = rand(-2.2,2.2); this.vy = rand(-2.2,2.2);
+    this.mass = r*r; // mass ∝ area
+    this.color = `hsl(${Math.floor(rand(180,320))} 80% 60%)`;
+  }
+  draw(){
+    ctx.beginPath();
+    ctx.fillStyle=this.color;
+    ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fill();
+    ctx.closePath();
+  }
+  step(){
+    this.x += this.vx; this.y += this.vy;
+    // wall bounce
+    if(this.x - this.r < 0){ this.x = this.r; this.vx *= -1; }
+    if(this.x + this.r > W){ this.x = W - this.r; this.vx *= -1; }
+    if(this.y - this.r < 0){ this.y = this.r; this.vy *= -1; }
+    if(this.y + this.r > H){ this.y = H - this.r; this.vy *= -1; }
+  }
+}
+
+// start with some balls
+const balls = [];
+for(let i=0;i<6;i++){
+  let b=new Ball(rand(40,W-40), rand(40,H-40), rand(12,26));
+  balls.push(b);
+}
+updateScore();
+
+function updateScore(){ scoreEl.textContent = `Balls: ${balls.length}`; }
+
+// elastic collision between two circles
+function resolveCollision(a,b){
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.hypot(dx,dy);
+  if(dist === 0) return;
+  // normalize
+  const nx = dx/dist, ny = dy/dist;
+  // relative velocity
+  const dvx = a.vx - b.vx, dvy = a.vy - b.vy;
+  const relVelAlongN = dvx*nx + dvy*ny;
+  if(relVelAlongN <= 0) return; // moving apart
+  const e = 1; // coefficient of restitution (1 = elastic)
+  const j = (-(1+e) * relVelAlongN) / (1/a.mass + 1/b.mass);
+  const impulseX = j*nx, impulseY = j*ny;
+  a.vx += (impulseX / a.mass);
+  a.vy += (impulseY / a.mass);
+  b.vx -= (impulseX / b.mass);
+  b.vy -= (impulseY / b.mass);
+  // separate overlapping
+  const overlap = (a.r + b.r) - dist;
+  if(overlap > 0){
+    const sep = overlap / (1/a.mass + 1/b.mass);
+    a.x -= nx * sep / a.mass;
+    a.y -= ny * sep / a.mass;
+    b.x += nx * sep / b.mass;
+    b.y += ny * sep / b.mass;
+  }
+}
+
+function stepAll(){
+  // update positions
+  for(const b of balls) b.step();
+  // pairwise collisions
+  for(let i=0;i<balls.length;i++){
+    for(let j=i+1;j<balls.length;j++){
+      const A = balls[i], B = balls[j];
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const dist = Math.hypot(dx,dy);
+      if(dist < A.r + B.r) resolveCollision(A,B);
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // subtle grid
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.beginPath();
+  for(let x=0;x<W;x+=40){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
+  for(let y=0;y<H;y+=40){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
+  ctx.strokeStyle = '#9fb0c3'; ctx.stroke();
+  ctx.restore();
+
+  for(const b of balls) b.draw();
+}
+
+function loop(){
+  stepAll();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// add ball on click
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  balls.push(new Ball(x,y, rand(12,26)));
+  updateScore();
+});
+
+// keyboard: 'C' clears, 'R' randomize velocities
+window.addEventListener('keydown', e=>{
+  if(e.key.toLowerCase() === 'c'){ balls.length = 0; updateScore(); }
+  if(e.key.toLowerCase() === 'r'){ for(const b of balls){ b.vx = rand(-3,3); b.vy = rand(-3,3); } }
+});
+</script>
+</body>
+</html>
+
